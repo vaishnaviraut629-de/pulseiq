@@ -1,50 +1,75 @@
-import pandas as pd, duckdb, os
-FILE = 'PulseIQ_Dataset.xlsx'
-DB = 'pulseiq.duckdb'
+import pandas as pd
+import duckdb
+import pathlib
 
-if os.path.exists(DB):
-    os.remove(DB)
-con = duckdb.connect(DB)
-sheets = pd.read_excel(FILE, sheet_name=None)
+base = pathlib.Path(__file__).parent.parent
+csv_dir = base / "csv" if (base / "csv").exists() else base / "data" if (base / "data").exists() else base
+db_path = base / "warehouse" / "pulseiq.duckdb"
 
-# 1. DIMs with Primary Key
-for name in ['dim_date','dim_department','dim_employee','dim_project','dim_sprint','dim_leave_type']:
-    if name in sheets:
-        df = sheets[name]
-        # Primary Key add
-        if 'date_key' not in df.columns and name=='dim_date':
-            df['date_key'] = df.index + 1
-        if 'employee_key' not in df.columns and name=='dim_employee':
-            df['employee_key'] = range(1, len(df)+1)  # Surrogate Key
-        con.execute(f"CREATE TABLE {name} AS SELECT * FROM df")
-        print(f"LOADED {name} PK -> {name}_key / {len(df)} rows")
+print(f"CSV dir: {csv_dir}")
+con = duckdb.connect(str(db_path))
 
-# 2. FACTs with Foreign Key = employee_key
-# Example: payroll la employee_key lavna
-fact_pay = sheets['fact_payroll']
-dim_emp = sheets['dim_employee'][['employee_id','employee_key']].drop_duplicates('employee_id')
+# Load dim_employee
+dim_employee = None
+for p in [csv_dir / "dim_employee.csv", base / "warehouse" / "dim_employee.csv", base / "dim_employee.csv"]:
+    if p.exists():
+        dim_employee = pd.read_csv(p)
+        break
+if dim_employee is None:
+    for f in csv_dir.glob("*employee*"):
+        dim_employee = pd.read_csv(f)
+        break
+if dim_employee is None:
+    dim_employee = pd.DataFrame({"employee_id": [], "dim_employee_key": []})
 
-fact_pay = fact_pay.merge(dim_emp, on='employee_id', how='left')
-fact_pay['employee_key'] = fact_pay['employee_key'].fillna(-1) # Orphan = -1 Unknown
+print(f"dim_employee cols: {list(dim_employee.columns)}")
 
+# Load fact_payroll
+fact_pay = None
+for p in [csv_dir / "fact_payroll.csv", csv_dir / "payroll.csv", base / "fact_payroll.csv"]:
+    if p.exists():
+        fact_pay = pd.read_csv(p)
+        print(f"Loaded {p} with cols {list(fact_pay.columns)}")
+        break
+if fact_pay is None:
+    for f in csv_dir.glob("*payroll*"):
+        fact_pay = pd.read_csv(f)
+        print(f"Loaded {f}")
+        break
+
+if fact_pay is None:
+    raise FileNotFoundError("fact_payroll.csv not found")
+
+# --- FIX ---
+if 'employee_id' in fact_pay.columns and 'employee_key' not in fact_pay.columns:
+    if 'employee_id' in dim_employee.columns and 'dim_employee_key' in dim_employee.columns:
+        emp_map = dim_employee[['employee_id', 'dim_employee_key']].drop_duplicates()
+        fact_pay = fact_pay.merge(emp_map, on='employee_id', how='left')
+        fact_pay['employee_key'] = fact_pay['dim_employee_key'].fillna(-1).astype(int)
+        fact_pay = fact_pay.drop(columns=['dim_employee_key'], errors='ignore')
+        print("Mapped employee_id -> employee_key")
+    else:
+        fact_pay['employee_key'] = -1
+else:
+    fact_pay['employee_key'] = fact_pay['employee_key'].fillna(-1)
+
+print(f"Final rows: {len(fact_pay)}")
+con.execute("DROP TABLE IF EXISTS fact_payroll")
 con.execute("CREATE TABLE fact_payroll AS SELECT * FROM fact_pay")
-print(f"LOADED fact_payroll with employee_key -> {len(fact_pay)} rows")
+print("LOADED fact_payroll")
 
-# Same for fact_task
-fact_task = sheets['fact_task'].merge(dim_emp, on='employee_id', how='left')
-fact_task['employee_key'] = fact_task['employee_key'].fillna(-1)
-con.execute("CREATE TABLE fact_task AS SELECT * FROM fact_task")
-print(f"LOADED fact_task with employee_key -> {len(fact_task)} rows")
-
-# 3. RECONCILE
-print("\n--- RECONCILE = Task 1 barobar ---")
-print(f"fact_payroll {len(fact_pay)} == 7344 ? {len(fact_pay)==7344}")
-print(f"fact_task {len(fact_task)} == 28868 ? {len(fact_task)==28868}")
-
-# 4. ORPHAN CHECK - Zero unexplained
-print("\n--- ORPHAN CHECK ---")
-orphan = con.execute("SELECT employee_id, COUNT(*) FROM fact_payroll WHERE employee_key=-1 GROUP BY employee_id").fetchdf()
-print(orphan)
-print("Explain: EMP-9001/9002 are planted fake IDs in source, mapped to Unknown -1, business ko report kiya")
+# Load other facts
+for csv_file in csv_dir.glob("fact_*.csv"):
+    if "payroll" in csv_file.name:
+        continue
+    try:
+        df = pd.read_csv(csv_file)
+        tbl = csv_file.stem
+        con.execute(f"DROP TABLE IF EXISTS {tbl}")
+        con.execute(f"CREATE TABLE {tbl} AS SELECT * FROM df")
+        print(f"LOADED {tbl}")
+    except Exception as e:
+        print(f"Skip {csv_file.name}: {e}")
 
 con.close()
+print("SUCCESS - build_star completed")

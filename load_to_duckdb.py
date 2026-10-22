@@ -1,16 +1,20 @@
 import duckdb
-import pandas as pd
-from pathlib import Path
+import os
 
 con = duckdb.connect('pulseiq.duckdb')
-csv_folder = Path("csv")
 
-for f in csv_folder.glob("*.csv"):
-    table = f.stem.lower()
-    df = pd.read_csv(f)
-    con.execute(f"DROP TABLE IF EXISTS {table}")
-    con.execute(f"CREATE TABLE {table} AS SELECT * FROM df")
-    print(f"{table}: {len(df)} rows loaded")
+csv_folder = 'csv'
+for file in os.listdir(csv_folder):
+    if file.endswith('.csv'):
+        table_name = file.replace('.csv','')
+        path = os.path.join(csv_folder, file).replace('\\','/')
+        try:
+            con.execute(f"DROP TABLE IF EXISTS {table_name}")
+            con.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_csv('{path}', AUTO_DETECT=TRUE)")
+            print(f"Loaded {table_name}")
+        except Exception as e:
+            print(f"Failed {table_name}: {e}")
 
-print("--- pulseiq.duckdb ready ---")
+print("\nAll tables in DB:")
+print(con.execute("SHOW TABLES").fetchdf().to_string())
 con.close()
