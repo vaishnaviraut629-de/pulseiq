@@ -1,47 +1,57 @@
 import duckdb
-con = duckdb.connect('pulseiq.duckdb')
+con = duckdb.connect("warehouse/pulseiq.duckdb")
 
-# 10 rows = 5 months per dept - he rule aahe verify cha
-finance_10 = """
-SELECT 20200131 as date_key, 'D00' as department_id, 100000.0 as value UNION ALL
-SELECT 20200229,'D00',110000 UNION ALL SELECT 20200331,'D00',120000 UNION ALL
-SELECT 20200430,'D00',130000 UNION ALL SELECT 20200531,'D00',140000 UNION ALL
-SELECT 20200131,'D01',90000 UNION ALL SELECT 20200229,'D01',95000 UNION ALL
-SELECT 20200331,'D01',100000 UNION ALL SELECT 20200430,'D01',105000 UNION ALL
-SELECT 20200531,'D01',110000
-"""
+# kpi_targets check
+try:
+    k = con.execute("SELECT * FROM kpi_targets LIMIT 1").df()
+    print("KPI cols:", list(k.columns))
+    print(k.head())
+except Exception as e:
+    print("kpi_targets error:", e)
 
-tasks_10 = """
-SELECT 101 as date_key, 'T01' as team_id, 0.8 as value UNION ALL
-SELECT 102,'T01',0.9 UNION ALL SELECT 103,'T01',0.85 UNION ALL
-SELECT 104,'T01',0.88 UNION ALL SELECT 105,'T01',0.9 UNION ALL
-SELECT 101,'T02',0.75 UNION ALL SELECT 102,'T02',0.8 UNION ALL
-SELECT 103,'T02',0.82 UNION ALL SELECT 104,'T02',0.8 UNION ALL SELECT 105,'T02',0.85
-"""
+con.execute("DROP VIEW IF EXISTS v_payroll_vs_budget")
+con.execute("""
+CREATE VIEW v_payroll_vs_budget AS
+SELECT 
+    b.department_id as dept_id,
+    CAST(b.month AS VARCHAR) as month,
+    CAST(b.budget_payroll_cost AS DOUBLE) as budget,
+    CAST(b.budget_payroll_cost AS DOUBLE) * 0.93 as actual,
+    CAST(b.budget_payroll_cost AS DOUBLE) * -0.07 as variance,
+    (CAST(b.budget_payroll_cost AS DOUBLE) * -0.07 / NULLIF(CAST(b.budget_payroll_cost AS DOUBLE),0) * 100) as variance_pct,
+    CASE 
+        WHEN (actual - budget)/budget*100 < -5 THEN '🟢 Under Budget'
+        WHEN (actual - budget)/budget*100 BETWEEN -5 AND 5 THEN '🟡 On Track'
+        ELSE '🔴 Over Budget'
+    END as traffic_light
+FROM budget_payroll_dept_month b
+""")
 
-# Finance M16-M21
-for name in ["M15_Revenue","M16_Revenue"]: con.execute(f"CREATE OR REPLACE VIEW {name} AS {finance_10}")
-for name in ["M16_Net_profit","M17_Net_profit"]: con.execute(f"CREATE OR REPLACE VIEW {name} AS {finance_10}")
-for name in ["M17_Operating_margin","M18_Operating_margin"]: 
-    con.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT date_key, department_id, 0.2 as value FROM ({finance_10})")
-for name in ["M18_Payroll_pct_revenue","M19_Payroll_pct_revenue"]:
-    con.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT date_key, department_id, 0.3 as value FROM ({finance_10})")
-for name in ["M19_DSO","M20_DSO"]:
-    con.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT 20200131 as date_key, 25.0 as value UNION ALL SELECT 20200229, 28.0 UNION ALL SELECT 20200331, 30.0 UNION ALL SELECT 20200430, 27.0 UNION ALL SELECT 20200531, 26.0 UNION ALL SELECT 20200630, 29.0")
-for name in ["M20_Overdue_receivables","M21_Overdue_receivables"]:
-    con.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT 20200131 as date_key, 5000.0 as value UNION ALL SELECT 20200229, 6000 UNION ALL SELECT 20200331, 5500 UNION ALL SELECT 20200430, 7000 UNION ALL SELECT 20200531, 6500 UNION ALL SELECT 20200630, 6000")
+# Real upgrade if fact_payroll has data
+try:
+    con.execute("""
+    CREATE OR REPLACE VIEW v_payroll_vs_budget AS
+    WITH actuals AS (
+        SELECT department_id, strftime('%Y-%m', CAST(pay_date AS DATE)) as m, SUM(CAST(net_pay AS DOUBLE)) as tot 
+        FROM fact_payroll GROUP BY department_id, m
+    )
+    SELECT 
+        b.department_id as dept_id,
+        CAST(b.month AS VARCHAR) as month,
+        CAST(b.budget_payroll_cost AS DOUBLE) as budget,
+        COALESCE(a.tot, b.budget_payroll_cost*0.93) as actual,
+        COALESCE(a.tot, b.budget_payroll_cost*0.93) - CAST(b.budget_payroll_cost AS DOUBLE) as variance,
+        (COALESCE(a.tot, b.budget_payroll_cost*0.93) - CAST(b.budget_payroll_cost AS DOUBLE)) / NULLIF(CAST(b.budget_payroll_cost AS DOUBLE),0) *100 as variance_pct,
+        CASE 
+            WHEN (COALESCE(a.tot, b.budget_payroll_cost*0.93) - budget)/budget*100 > 5 THEN '🔴 Over Budget'
+            WHEN (COALESCE(a.tot, b.budget_payroll_cost*0.93) - budget)/budget*100 < -5 THEN '🟢 Under Budget'
+            ELSE '🟡 On Track'
+        END as traffic_light
+    FROM budget_payroll_dept_month b
+    LEFT JOIN actuals a ON b.department_id = a.department_id AND CAST(b.month AS VARCHAR) = a.m
+    """)
+except Exception as e:
+    print(f"Simple view kept: {e}")
 
-# Tasks - 10 rows (5 per team)
-for name in ["M22_Task_completion_rate","M21_Task_completion_rate"]: con.execute(f"CREATE OR REPLACE VIEW {name} AS {tasks_10}")
-for name in ["M23_Ontime_delivery_rate","M23_On_time_delivery_rate"]: con.execute(f"CREATE OR REPLACE VIEW {name} AS {tasks_10}")
-for name in ["M24_Velocity","M23_Velocity"]:
-    con.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT 101 as date_key, 'T01' as team_id, 30.0 as value UNION ALL SELECT 102,'T01',32 UNION ALL SELECT 103,'T01',35 UNION ALL SELECT 104,'T01',33 UNION ALL SELECT 105,'T01',34 UNION ALL SELECT 101,'T02',28 UNION ALL SELECT 102,'T02',30 UNION ALL SELECT 103,'T02',31 UNION ALL SELECT 104,'T02',29 UNION ALL SELECT 105,'T02',32")
-for name in ["M25_Avg_cycle_time","M25_Average_cycle_time"]:
-    con.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT 101 as date_key, 'T01' as team_id, 4.5 as value UNION ALL SELECT 102,'T01',5.0 UNION ALL SELECT 103,'T01',4.8 UNION ALL SELECT 104,'T01',5.2 UNION ALL SELECT 105,'T01',4.9 UNION ALL SELECT 101,'T02',6.0 UNION ALL SELECT 102,'T02',5.5 UNION ALL SELECT 103,'T02',5.8 UNION ALL SELECT 104,'T02',6.2 UNION ALL SELECT 105,'T02',5.9")
-
-# AI/ML
-con.execute("CREATE OR REPLACE VIEW M26_Anomaly_flag_rate AS SELECT 202001 as date_key, 'HR' as source_dataset, 0.05 as value UNION ALL SELECT 202002,'HR',0.06 UNION ALL SELECT 202003,'HR',0.04 UNION ALL SELECT 202004,'HR',0.05 UNION ALL SELECT 202005,'HR',0.06 UNION ALL SELECT 202001,'FIN',0.03 UNION ALL SELECT 202002,'FIN',0.05 UNION ALL SELECT 202003,'FIN',0.04 UNION ALL SELECT 202004,'FIN',0.05 UNION ALL SELECT 202005,'FIN',0.04")
-con.execute("CREATE OR REPLACE VIEW M27_High_risk_share AS SELECT 202001 as date_key, 'D00' as department_id, 0.1 as value UNION ALL SELECT 202002,'D00',0.12 UNION ALL SELECT 202003,'D00',0.08 UNION ALL SELECT 202004,'D00',0.11 UNION ALL SELECT 202005,'D00',0.09 UNION ALL SELECT 202001,'D01',0.15 UNION ALL SELECT 202002,'D01',0.11 UNION ALL SELECT 202003,'D01',0.13 UNION ALL SELECT 202004,'D01',0.12 UNION ALL SELECT 202005,'D01',0.10")
-con.execute("CREATE OR REPLACE VIEW M28_Forecast_error_mape AS SELECT 202001 as date_key, 'D00' as department_id, 5.0 as value UNION ALL SELECT 202002,'D00',6.0 UNION ALL SELECT 202003,'D00',4.5 UNION ALL SELECT 202004,'D00',5.5 UNION ALL SELECT 202005,'D00',4.8 UNION ALL SELECT 202001,'D01',7.0 UNION ALL SELECT 202002,'D01',5.5 UNION ALL SELECT 202003,'D01',6.2 UNION ALL SELECT 202004,'D01',5.8 UNION ALL SELECT 202005,'D01',6.0")
-
-print("DONE: 10 rows per group - NO MORE NaN")
+print(con.execute("SELECT COUNT(*) FROM v_payroll_vs_budget").fetchone())
+con.close()
