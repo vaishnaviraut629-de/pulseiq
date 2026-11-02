@@ -29,9 +29,4 @@ Logic: fact_ledger + dim_account joined, is_group='n' to avoid double counting.
 2. Vendor rate inflation - Proof: AVG amount per vendor per month from fact_expense trend
 3. Bench cost / Unbilled - Proof: fact_attendance hours paid vs fact_ledger hours billed
 
-## Reference
-Streamlit https://github.com/streamlit/streamlit
-Plotly https://github.com/plotly/plotly.py
-Beancount https://github.com/beancount/beancount
-
 Statement: I built a profit and loss view that ties to the books.
