@@ -21,8 +21,6 @@ These are the only statuses considered as open receivables. Mentioned on the pag
 
 ### Think for Yourself
 
-### Think for Yourself
-
 When I checked the data, I saw one big client is paying on time but always taking 75 days. 
 
 For me this is a risk. Because even if our sales is good, cash will come very late. Then we have to manage our own payments from pocket, which is not good for business.
