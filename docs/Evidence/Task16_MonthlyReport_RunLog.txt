@@ -1,0 +1,4 @@
+Generating Report for: 2026-10
+Date Range: 2026-10-01 to 2026-10-31
+Data Cut-off: 2026-11-16 11:23:51
+Report saved: phase-4/monthly_report_2026-10.xlsx
