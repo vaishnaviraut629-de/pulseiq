@@ -27,17 +27,25 @@ df_base = dim_emp.copy()
 if 'dept_id' in dim_emp.columns and 'dept_id' in dim_dept.columns:
     df_base = df_base.merge(dim_dept, on="dept_id", how="left")
 elif 'department_id' in dim_emp.columns:
-    df_base = df_base.merge(dim_dept, left_on="department_id", right_on="dept_id", how="left")
+   # Safe merge - avoid KeyError
+df_base = dim_emp.copy()
 
-if 'team_id' in df_base.columns and 'team_id' in dim_team.columns:
-    df_base = df_base.merge(dim_team, on="team_id", how="left")
-st.sidebar.header("Login as Role (demo_users.csv)")
-role = st.sidebar.selectbox("Select Role", ["ADMIN", "HR", "MANAGER", "EXECUTIVE"])
-my_dept = st.sidebar.selectbox("Your Dept (if MANAGER)", dim_dept['dept_name'].unique())
+# Only merge if columns exist
+try:
+    if 'dept_id' in dim_dept.columns:
+        # Use common column if possible
+        if 'dept_id' in df_base.columns:
+            df_base = df_base.merge(dim_dept, on='dept_id', how='left')
+        elif 'department_id' in df_base.columns:
+            df_base = df_base.merge(dim_dept, left_on='department_id', right_on='dept_id', how='left')
+except:
+    pass
 
-# ---- 1. LIST METRICS & ROLE SAFETY ----
-st.subheader("1. Metrics and Role-based Access")
-
+try:
+    if 'team_id' in df_base.columns and 'team_id' in dim_team.columns:
+        df_base = df_base.merge(dim_team, on='team_id', how='left')
+except:
+    pass
 metric_dict_df['minimum_group_size'] = pd.to_numeric(metric_dict_df['minimum_group_size'], errors='coerce').fillna(5)
 
 def allowed_for_role(row, role):
