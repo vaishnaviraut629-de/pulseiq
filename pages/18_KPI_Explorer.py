@@ -1,17 +1,30 @@
 import streamlit as st
 import pandas as pd
+import os
 
 st.title("Task 18: Self-Service KPI Explorer")
 st.caption("Privacy Safe | Uses metric_dictionary.csv")
 
-try:
-    dim_emp = pd.read_csv("data/dim_employee.csv")
-except:
-    dim_emp = pd.read_csv("dim_employee.csv")
+# FIX FOR PATH - works on both local and Streamlit Cloud
+def load_csv(file_name):
+    possible_paths = [
+        f"data/{file_name}",
+        f"../data/{file_name}",
+        file_name,
+        f"/mount/src/pulseiq/data/{file_name}"
+    ]
+    for p in possible_paths:
+        if os.path.exists(p):
+            return pd.read_csv(p)
+    # last try
+    return pd.read_csv(f"data/{file_name}")
 
 try:
-    metric_dict = pd.read_csv("data/metric_dictionary.csv")
-except:
+    dim_emp = load_csv("dim_employee.csv")
+    metric_dict = load_csv("metric_dictionary.csv")
+except Exception as e:
+    st.error(f"CSV not found, creating dummy. Error: {e}")
+    dim_emp = pd.DataFrame({"Department": ["HR","Tech","Sales"]*10, "EmployeeID": range(30)})
     metric_dict = pd.DataFrame({
         'metric_name': ['Headcount', 'Attrition Rate', 'Avg Tenure'],
         'minimum_group_size': [5, 10, 5]
