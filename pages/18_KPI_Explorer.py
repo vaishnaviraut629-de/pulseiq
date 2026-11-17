@@ -1,121 +1,48 @@
 import streamlit as st
 import pandas as pd
-import os
 
-st.set_page_config(layout="wide")
 st.title("Task 18: Self-Service KPI Explorer")
-st.caption("Privacy Safe | Uses metric_dictionary.csv -> minimum_group_size")
-
-CSV = "csv"
-
-@st.cache_data
-def load():
-    emp = pd.read_csv(f"{CSV}/dim_employee.csv")
-    dept = pd.read_csv(f"{CSV}/dim_department.csv")
-    team = pd.read_csv(f"{CSV}/dim_team.csv")
-    metric_dict = pd.read_csv(f"{CSV}/metric_dictionary.csv")
-    payroll = pd.read_csv(f"{CSV}/fact_payroll.csv")
-    headcount = pd.read_csv(f"{CSV}/fact_headcount_monthly.csv")
-    return emp, dept, team, metric_dict, payroll, headcount
-
-dim_emp, dim_dept, dim_team, metric_dict_df, fact_payroll, fact_head = load()
-
-# Join for drill-down: Company -> Department -> Team
-# Fix for dept_id error
-df_base = dim_emp.copy()
-
-if 'dept_id' in dim_emp.columns and 'dept_id' in dim_dept.columns:
-    df_base = df_base.merge(dim_dept, on="dept_id", how="left")
-elif 'department_id' in dim_emp.columns:
-   # Safe merge - avoid KeyError
-df_base = dim_emp.copy()
-
-# Only merge if columns exist
-try:
-    if 'dept_id' in dim_dept.columns:
-        # Use common column if possible
-        if 'dept_id' in df_base.columns:
-            df_base = df_base.merge(dim_dept, on='dept_id', how='left')
-        elif 'department_id' in df_base.columns:
-            df_base = df_base.merge(dim_dept, left_on='department_id', right_on='dept_id', how='left')
-except:
-    pass
+st.caption("Privacy Safe | Uses metric_dictionary.csv")
 
 try:
-    if 'team_id' in df_base.columns and 'team_id' in dim_team.columns:
-        df_base = df_base.merge(dim_team, on='team_id', how='left')
+    dim_emp = pd.read_csv("data/dim_employee.csv")
 except:
-    pass
-metric_dict_df['minimum_group_size'] = pd.to_numeric(metric_dict_df['minimum_group_size'], errors='coerce').fillna(5)
+    dim_emp = pd.read_csv("dim_employee.csv")
 
-def allowed_for_role(row, role):
-    owner = str(row['owner_team'])
-    metric = str(row['metric_name']).lower()
-    if role == "ADMIN": 
-        return True
-    if role == "HR": 
-        return "HR" in owner or "Payroll" in owner or "headcount" in metric
-    if role == "MANAGER": 
-        return "headcount" in metric or "attendance" in metric  # No payroll, no attrition
-    if role == "EXECUTIVE": 
-        return owner in ["Finance", "HR Analytics"] and "pay" not in metric
-    return False
+try:
+    metric_dict = pd.read_csv("data/metric_dictionary.csv")
+except:
+    metric_dict = pd.DataFrame({
+        'metric_name': ['Headcount', 'Attrition Rate', 'Avg Tenure'],
+        'minimum_group_size': [5, 10, 5]
+    })
 
-metric_dict_df['allowed_for_'+role] = metric_dict_df.apply(lambda r: allowed_for_role(r, role), axis=1)
-allowed_metrics_df = metric_dict_df[metric_dict_df['allowed_for_'+role]]
+df_base = dim_emp.copy()
 
-st.write(f"**Role {role} can access {len(allowed_metrics_df)} metrics:**")
-st.dataframe(allowed_metrics_df[['metric_id','metric_name','minimum_group_size','owner_team']], use_container_width=True)
+dept_col = None
+for c in ['Department', 'dept_name', 'department', 'Dept']:
+    if c in df_base.columns:
+        dept_col = c
+        break
 
-# ---- 2. EXPLORER ----
-c1, c2, c3 = st.columns(3)
-with c1:
-    sel_metric_name = st.selectbox("2. Choose Metric", allowed_metrics_df['metric_name'].tolist())
-    sel_row = metric_dict_df[metric_dict_df['metric_name'] == sel_metric_name].iloc[0]
-    MIN_GROUP = int(sel_row['minimum_group_size']) if sel_row['minimum_group_size'] >=5 else 5
-with c2:
-    dimension = st.selectbox("3. Choose Dimension", ["dept_name", "team_name"])
-with c3:
-    drill = st.selectbox("4. Drill Level", ["Company", "Department", "Team"])
+if dept_col:
+    selected = st.sidebar.selectbox(f"Select {dept_col}", ["All"] + sorted(df_base[dept_col].dropna().unique().tolist()))
+    if selected != "All":
+        df_base = df_base[df_base[dept_col] == selected]
 
-st.info(f"Selected: **{sel_metric_name}** | Minimum Group Size Required = **{MIN_GROUP}** | Role = {role}")
+st.subheader(f"Current Group Size: {len(df_base)}")
 
-# Filter for MANAGER
-view_df = df_base.copy()
-if role == "MANAGER":
-    view_df = df_base[df_base['dept_name'] == my_dept]
-    st.warning(f"MANAGER view: Only showing {my_dept} - {len(view_df)} employees")
-
-# ---- 3. DRILL-DOWN + PRIVACY HIDE ----
-st.divider()
-st.subheader(f"Drill-down: {drill} by {dimension}")
-
-if drill == "Company":
-    n = len(view_df)
-    if n < MIN_GROUP:
-        st.error(f"🔒 Hidden - Group size {n} < required {MIN_GROUP} for '{sel_metric_name}'. Hidden to prevent privacy incident.")
+for idx, row in metric_dict.iterrows():
+    metric_name = row['metric_name'] if 'metric_name' in row else row[0]
+    min_size = int(row['minimum_group_size']) if 'minimum_group_size' in row else 5
+    if len(df_base) < min_size:
+        st.metric(label=metric_name, value="🔒 Hidden", delta=f"n={len(df_base)} < {min_size}")
     else:
-        st.metric(f"Company - {sel_metric_name}", f"{n} records", f"Group Size OK: {n} >= {MIN_GROUP}")
-else:
-    group_col = "dept_name" if drill == "Department" else "team_name"
-    grouped = view_df.groupby(group_col).size().reset_index(name="group_size")
-    
-    # Apply privacy rule
-    grouped['status'] = grouped['group_size'].apply(lambda x: f"🔒 Hidden - Only {x} < {MIN_GROUP}" if x < MIN_GROUP else f"Visible ({x})")
-    grouped['is_hidden'] = grouped['group_size'] < MIN_GROUP
-    
-    st.dataframe(grouped, use_container_width=True)
-    
-    safe = grouped[~grouped['is_hidden']]
-    hidden = grouped[grouped['is_hidden']]
-    
-    if not safe.empty:
-        st.bar_chart(safe.set_index(group_col)['group_size'])
-        st.success(f"{len(safe)} groups are visible")
-    if not hidden.empty:
-        st.error(f"🔒 {len(hidden)} groups HIDDEN for privacy (size < {MIN_GROUP}): {', '.join(hidden[group_col].tolist())}")
+        if "Headcount" in str(metric_name):
+            st.metric(label=metric_name, value=len(df_base))
+        else:
+            st.metric(label=metric_name, value="OK")
 
-# ---- 4. BREAK-IT NOTES ----
 st.divider()
 st.subheader("Think for Yourself")
 
