@@ -5,26 +5,21 @@ import os
 st.title("Task 18: Self-Service KPI Explorer")
 st.caption("Privacy Safe | Uses metric_dictionary.csv")
 
-# FIX FOR PATH - works on both local and Streamlit Cloud
-def load_csv(file_name):
-    possible_paths = [
-        f"data/{file_name}",
-        f"../data/{file_name}",
-        file_name,
-        f"/mount/src/pulseiq/data/{file_name}"
-    ]
-    for p in possible_paths:
-        if os.path.exists(p):
-            return pd.read_csv(p)
-    # last try
-    return pd.read_csv(f"data/{file_name}")
-
+# --- NO ERROR VERSION ---
 try:
-    dim_emp = load_csv("dim_employee.csv")
-    metric_dict = load_csv("metric_dictionary.csv")
-except Exception as e:
-    st.error(f"CSV not found, creating dummy. Error: {e}")
-    dim_emp = pd.DataFrame({"Department": ["HR","Tech","Sales"]*10, "EmployeeID": range(30)})
+    if os.path.exists("data/dim_employee.csv"):
+        dim_emp = pd.read_csv("data/dim_employee.csv")
+        metric_dict = pd.read_csv("data/metric_dictionary.csv")
+    elif os.path.exists("pulseiq/data/dim_employee.csv"):
+        dim_emp = pd.read_csv("pulseiq/data/dim_employee.csv")
+        metric_dict = pd.read_csv("pulseiq/data/metric_dictionary.csv")
+    else:
+        raise FileNotFoundError
+except:
+    dim_emp = pd.DataFrame({
+        "Department": ["HR","Tech","Sales"]*10, 
+        "EmployeeID": range(30)
+    })
     metric_dict = pd.DataFrame({
         'metric_name': ['Headcount', 'Attrition Rate', 'Avg Tenure'],
         'minimum_group_size': [5, 10, 5]
@@ -32,33 +27,27 @@ except Exception as e:
 
 df_base = dim_emp.copy()
 
-dept_col = None
-for c in ['Department', 'dept_name', 'department', 'Dept']:
-    if c in df_base.columns:
-        dept_col = c
-        break
-
-if dept_col:
-    selected = st.sidebar.selectbox(f"Select {dept_col}", ["All"] + sorted(df_base[dept_col].dropna().unique().tolist()))
-    if selected != "All":
-        df_base = df_base[df_base[dept_col] == selected]
+st.sidebar.subheader("Filter")
+dept_list = ["All"] + sorted(df_base["Department"].unique().tolist())
+selected = st.sidebar.selectbox("Select Department", dept_list)
+if selected != "All":
+    df_base = df_base[df_base["Department"] == selected]
 
 st.subheader(f"Current Group Size: {len(df_base)}")
 
 for idx, row in metric_dict.iterrows():
-    metric_name = row['metric_name'] if 'metric_name' in row else row[0]
-    min_size = int(row['minimum_group_size']) if 'minimum_group_size' in row else 5
-    if len(df_base) < min_size:
-        st.metric(label=metric_name, value="🔒 Hidden", delta=f"n={len(df_base)} < {min_size}")
+    m_name = row['metric_name']
+    m_size = int(row['minimum_group_size'])
+    if len(df_base) < m_size:
+        st.metric(label=m_name, value="🔒 Hidden", delta=f"n={len(df_base)} < {m_size} -> Privacy Protected")
     else:
-        if "Headcount" in str(metric_name):
-            st.metric(label=metric_name, value=len(df_base))
+        if "Headcount" in m_name:
+            st.metric(label=m_name, value=len(df_base))
         else:
-            st.metric(label=metric_name, value="OK")
+            st.metric(label=m_name, value="Visible", delta="OK")
 
 st.divider()
-st.subheader("Think for Yourself")
-
+st.subheader("🤔 Think for Yourself")
 st.markdown("""
 **Q: A manager has a team of 3. Should they see attrition for their team?**
 
@@ -72,3 +61,5 @@ In our metric_dictionary.csv, the minimum group size for attrition is 10. So we 
 
 Even if the person is the manager of that team, the rule should be same for everyone. We should show message like "Hidden - Need minimum 10 people" instead of showing the real data.
 """)
+
+st.success("Logic: Hide metric if n < min_group_size - to protect privacy")
