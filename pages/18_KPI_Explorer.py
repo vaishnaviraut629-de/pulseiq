@@ -21,8 +21,16 @@ def load():
 dim_emp, dim_dept, dim_team, metric_dict_df, fact_payroll, fact_head = load()
 
 # Join for drill-down: Company -> Department -> Team
-df_base = dim_emp.merge(dim_dept, on="dept_id", how="left").merge(dim_team, on="team_id", how="left")
+# Fix for dept_id error
+df_base = dim_emp.copy()
 
+if 'dept_id' in dim_emp.columns and 'dept_id' in dim_dept.columns:
+    df_base = df_base.merge(dim_dept, on="dept_id", how="left")
+elif 'department_id' in dim_emp.columns:
+    df_base = df_base.merge(dim_dept, left_on="department_id", right_on="dept_id", how="left")
+
+if 'team_id' in df_base.columns and 'team_id' in dim_team.columns:
+    df_base = df_base.merge(dim_team, on="team_id", how="left")
 st.sidebar.header("Login as Role (demo_users.csv)")
 role = st.sidebar.selectbox("Select Role", ["ADMIN", "HR", "MANAGER", "EXECUTIVE"])
 my_dept = st.sidebar.selectbox("Your Dept (if MANAGER)", dim_dept['dept_name'].unique())
