@@ -1,66 +1,65 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="PulseIQ Metrics API")
+app = FastAPI(title="PulseIQ Metrics API", version="1.0")
 
-@app.get("/")
-def home():
-    return {"message": "PulseIQ API is running"}
+LAST_REFRESH = "2026-11-18"
+SOURCE = "pulseiq_aggregate table"
 
 @app.get("/metrics/headcount")
 def headcount():
     return {
-        "metric": "Headcount",
+        "metric": "headcount",
         "value": 81,
-        "definition": "Total active employees",
-        "source": "dim_employee",
-        "last_refresh": "2026-11-18 09:00 IST",
-        "freshness": "Refreshed daily at 9 AM"
+        "definition": "Count of Active employees",
+        "source": SOURCE,
+        "last_refresh": LAST_REFRESH,
+        "freshness": "Data last refreshed on 2026-11-18"
     }
 
 @app.get("/metrics/attrition-rate")
 def attrition():
     return {
-        "metric": "Attrition Rate",
+        "metric": "attrition-rate",
         "value": 12.5,
         "unit": "%",
-        "definition": "(Left in 12 months / Avg Headcount) * 100",
-        "source": "fact_attrition",
-        "last_refresh": "2026-11-18 09:00 IST",
-        "freshness": "Refreshed daily at 9 AM"
+        "definition": "Employees who left / Total employees * 100",
+        "source": SOURCE,
+        "last_refresh": LAST_REFRESH,
+        "freshness": "Data last refreshed on 2026-11-18"
     }
 
 @app.get("/metrics/avg-tenure")
 def tenure():
     return {
-        "metric": "Avg Tenure",
+        "metric": "avg-tenure",
         "value": 3.2,
         "unit": "years",
-        "definition": "Average years since joining",
-        "source": "dim_employee",
-        "last_refresh": "2026-11-18 09:00 IST",
-        "freshness": "Refreshed daily at 9 AM"
+        "definition": "Average years from joining date to today",
+        "source": SOURCE,
+        "last_refresh": LAST_REFRESH,
+        "freshness": "Data last refreshed on 2026-11-18"
     }
 
 @app.get("/metrics/avg-pay")
-def pay():
+def avg_pay():
     return {
-        "metric": "Avg Pay",
+        "metric": "avg-pay",
         "value": 85000,
         "unit": "INR",
-        "definition": "Average monthly salary",
-        "source": "fact_pay",
-        "last_refresh": "2026-11-18 09:00 IST",
-        "freshness": "Refreshed monthly on 1st"
+        "definition": "Average salary of Active employees",
+        "source": SOURCE,
+        "last_refresh": LAST_REFRESH,
+        "freshness": "Data last refreshed on 2026-11-18"
     }
 
 @app.get("/metrics/offer-accept-rate")
 def offer():
     return {
-        "metric": "Offer Accept Rate",
+        "metric": "offer-accept-rate",
         "value": 78,
         "unit": "%",
-        "definition": "(Accepted / Made) * 100 in last 90 days",
-        "source": "fact_offers",
-        "last_refresh": "2026-11-18 09:00 IST",
-        "freshness": "Refreshed daily at 9 AM"
+        "definition": "Accepted offers / Total offers * 100",
+        "source": SOURCE,
+        "last_refresh": LAST_REFRESH,
+        "freshness": "Data last refreshed on 2026-11-18"
     }
