@@ -1,55 +1,38 @@
-# Task 19: Metrics API
+# Task 19 - Governed API Report
 
-## Objective
-Let anyone get the same 5 HR metrics from one place, in JSON format, so there is no confusion from different excels.
+**Metric:** headcount
+**Value:** 81
+**Definition:** Count of Active employees
+**Source:** pulseiq_aggregate table
+**Last Refresh:** 2026-11-18
+**Freshness:** Data last refreshed on 2026-11-18
+**Owner:** HR Team
+**Maintained By:** Vaishnavi
 
-## What I Built
-- **API File:** `api/main.py`
-- **Framework:** FastAPI + Uvicorn
-- **Format:** JSON
-- **Live Link:** `http://127.0.0.1:8000/docs`
-- **Total Endpoints:** 5
+## 1. What was built
+Endpoint: `GET /metrics/headcount`
 
-## Metrics Tested
+The API now returns not only the value, but also governance information like definition, source and freshness:
 
-| Endpoint | Value I Got | Source |
-| --- | --- | --- |
-| GET /metrics/headcount | 81 | `pulseiq_aggregate...` |
-| GET /metrics/attrition-rate | 12.5 % | `pulseiq_aggregate...` |
-| GET /metrics/avg-tenure | 3.2 years | `pulseiq_aggregate...` |
-| GET /metrics/avg-pay | 85000 INR | `pulseiq_aggregate...` |
-| GET /metrics/offer-accept-rate | 78 % | `pulseiq_aggregate...` |
+{"metric":"headcount","value":81,"definition":"Count of Active employees","source":"pulseiq_aggregate table","last_refresh":"2026-11-18","freshness":"Data last refreshed on 2026-11-18"}
 
-**Dimensions:** None - API gives company level total only
+## 2. Lineage
+pulseiq_aggregate -> API (api/main.py) -> Dashboard
+Full lineage is in `docs/lineage.md`
 
-## How To Run
-```python
-pip install fastapi uvicorn
-uvicorn api.main:app --reload
-```markdown
-## What I Learned
-API is like a waiter in a hotel. We ask for headcount, it brings headcount. We ask for avg-pay, it brings avg-pay.
+## 3. Think For Yourself
 
-Before this task, everyone could say different headcount number from different excel. Now API gives only one number - 81. So no fight about which number is correct.
+**Q: Someone changes a column name in the raw feed. Which of your metrics would break? List them from your lineage.**
 
-I think this API will be useful for dashboard in next tasks. Dashboard will just call this API and show same numbers.
+**Ans:**
+In my lineage, I have only one metric which is headcount.
 
-## Think For Yourself
+So if someone changes a column name in the raw feed, my headcount metric will break. Because my headcount comes from pulseiq_aggregate table and that table comes from the raw feed.
 
-### Q1. If someone changes a column name in raw feed, which metrics will break?
-**Answer:**
-It depends on which column is changed. All metrics will not break together, only that metric will break which uses that column.
+If the column name is changed, the code will not understand which column to take. Then the table will not update properly and API will show wrong value or give error.
 
-I checked my lineage - which metric uses which column:
+So before changing any column name, we should first check lineage and see which metric is using that column, then change it in both places.
 
-| If this column changes | These metrics will break | Why? |
-| --- | --- | --- |
-| employee_id | All 5 will break | Because I use employee_id to count people in all metrics |
-| status / employment_status | headcount, attrition-rate | Because headcount counts only Active people, and attrition needs who left |
-| joining_date / hire_date | avg-tenure | Because tenure is calculated from joining date to today |
-| salary / monthly_pay | avg-pay | Because avg-pay is average of salary column only |
-| offer_status | offer-accept-rate | Because it counts how many offers were Accepted vs total offers |
+**1. headcount - WILL BREAK**
 
-My thinking - Suppose someone changes `salary` to `pay`, then only avg-pay will break. Headcount will still work because headcount does not use salary. This is good because we will know exactly where problem is.
-
-But if someone changes `employee_id`, then full API
+Reason: This metric depends on the `pulseiq_aggregate` table

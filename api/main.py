@@ -1,65 +1,58 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="PulseIQ Metrics API", version="1.0")
-
-LAST_REFRESH = "2026-11-18"
-SOURCE = "pulseiq_aggregate table"
+app = FastAPI(title="PulseIQ Metrics API")
 
 @app.get("/metrics/headcount")
-def headcount():
+def get_headcount():
     return {
         "metric": "headcount",
         "value": 81,
         "definition": "Count of Active employees",
-        "source": SOURCE,
-        "last_refresh": LAST_REFRESH,
+        "source": "pulseiq_aggregate table",
+        "last_refresh": "2026-11-18",
         "freshness": "Data last refreshed on 2026-11-18"
     }
 
-@app.get("/metrics/attrition-rate")
-def attrition():
+@app.get("/metrics/attrition_rate")
+def get_attrition():
     return {
-        "metric": "attrition-rate",
+        "metric": "attrition_rate",
         "value": 12.5,
-        "unit": "%",
-        "definition": "Employees who left / Total employees * 100",
-        "source": SOURCE,
-        "last_refresh": LAST_REFRESH,
+        "definition": "Percentage of employees who left in last 12 months",
+        "source": "pulseiq_aggregate table",
+        "last_refresh": "2026-11-18",
         "freshness": "Data last refreshed on 2026-11-18"
     }
 
-@app.get("/metrics/avg-tenure")
-def tenure():
+@app.get("/metrics/avg_tenure")
+def get_tenure():
     return {
-        "metric": "avg-tenure",
+        "metric": "avg_tenure",
         "value": 3.2,
-        "unit": "years",
-        "definition": "Average years from joining date to today",
-        "source": SOURCE,
-        "last_refresh": LAST_REFRESH,
+        "definition": "Average tenure of Active employees in years",
+        "source": "pulseiq_aggregate table",
+        "last_refresh": "2026-11-18",
         "freshness": "Data last refreshed on 2026-11-18"
     }
 
-@app.get("/metrics/avg-pay")
-def avg_pay():
+@app.get("/metrics/avg_salary")
+def get_salary():
     return {
-        "metric": "avg-pay",
-        "value": 85000,
-        "unit": "INR",
+        "metric": "avg_salary",
+        "value": 65000,
         "definition": "Average salary of Active employees",
-        "source": SOURCE,
-        "last_refresh": LAST_REFRESH,
+        "source": "pulseiq_aggregate table",
+        "last_refresh": "2026-11-18",
         "freshness": "Data last refreshed on 2026-11-18"
     }
 
-@app.get("/metrics/offer-accept-rate")
-def offer():
+@app.get("/metrics/new_hires")
+def get_new_hires():
     return {
-        "metric": "offer-accept-rate",
-        "value": 78,
-        "unit": "%",
-        "definition": "Accepted offers / Total offers * 100",
-        "source": SOURCE,
-        "last_refresh": LAST_REFRESH,
+        "metric": "new_hires",
+        "value": 8,
+        "definition": "Number of employees joined in last 30 days",
+        "source": "pulseiq_aggregate table",
+        "last_refresh": "2026-11-18",
         "freshness": "Data last refreshed on 2026-11-18"
     }

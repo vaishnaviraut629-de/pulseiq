@@ -1,53 +1,29 @@
-# Task 18: Self-Service KPI Explorer with Privacy
+# Task 19 - Governed API Report
 
-## Objective
-Let a user choose a metric and a dimension, drill from company to department to team, and never reveal small groups.
+## 1. What was built
+5 metrics are exposed through FastAPI. Each endpoint returns value, definition, source and freshness.
 
-## What I Built
-- **Explorer Page:** `pages/18_KPI_Explorer.py`
-- **Roles:** ADMIN, HR, MANAGER, EXECUTIVE (from `demo_users.csv`)
-- **Drill-down:** Company (n=30) -> Department (n=8) -> Team (n=3)
-- **Live Link:** `pulseiq-o5qndhp8k9qbdzwhmrk5o.streamlit.app/KPI_Explorer`
+## 2. API Examples
+GET /metrics/headcount -> {"metric":"headcount","value":81,"definition":"Count of Active employees","source":"pulseiq_aggregate table","last_refresh":"2026-11-18"}
+GET /metrics/attrition_rate -> {"metric":"attrition_rate","value":12.5,"definition":"Percentage of employees who left in last 12 months"}
+GET /metrics/avg_tenure -> {"metric":"avg_tenure","value":3.2,"definition":"Average tenure in years"}
+GET /metrics/avg_salary -> {"metric":"avg_salary","value":65000,"definition":"Average salary of Active employees"}
+GET /metrics/new_hires -> {"metric":"new_hires","value":8,"definition":"Employees joined in last 30 days"}
 
-## Metrics & Dimensions Allowed
+## 3. Lineage
+For all 5 metrics:
+Raw Feed -> ETL (api/main.py) -> pulseiq_aggregate (Warehouse) -> Metric View -> Dashboard
 
-| Role | Allowed Metrics | Safe Reason |
-| :--- | :--- | :--- |
-| ADMIN | Headcount, Attrition Rate, Avg Tenure, Pay | Full access |
-| HR | Headcount, Attrition Rate, Avg Tenure | No Pay |
-| EXECUTIVE | Headcount, Attrition Rate, Avg Tenure | Strategic only |
-| MANAGER | Headcount, Avg Tenure | Team only, no sensitive |
+## 4. Think For Yourself
+Q: Someone changes a column name in the raw feed. Which of your metrics would break? List them from your lineage.
+Ans:
+In my lineage, all 5 metrics will break. Because all 5 metrics come from the same pulseiq_aggregate table and that table comes from the raw feed.
+1. headcount - will break
+2. attrition_rate - will break
+3. avg_tenure - will break
+4. avg_salary - will break
+5. new_hires - will break
+If the column name is changed, the ETL will not find that column, the table will not update and all 5 APIs will show wrong value or error. So before changing any column, we must check lineage first.
 
-**Dimensions:** Company, Department, Team
-
-## Privacy Logic - Minimum Group Size
-
-```python
-MIN_GROUP_SIZE = {
-  "Headcount": 1,
-  "Attrition Rate": 10,
-  "Avg Tenure": 5,
-  "Pay": 15
-}
-
-if current_group_size < MIN_GROUP_SIZE[metric]:
-    st.error(f"🔒 Hidden - Group size {current_group_size} < minimum {MIN_GROUP_SIZE[metric]}. Privacy Protected.")
-else:
-    show_kpi(value)
-    ## Think For Yourself
-
-**Q: A manager has a team of 3. Should they see attrition for their team?**
-
-**My Answer: No, they should not see it.**
-
-Actually first I thought yes, manager should see his own team data. But then I thought about privacy.
-
-If team is only 3 people and 1 person leaves, attrition shows 33%. In small team everyone knows who left. So it is indirectly telling who resigned. That is personal information.
-
-Also if team is 3, if we show pay also, we can guess whose pay is what. So it is risky.
-
-In my app I set minimum 10 for attrition. So for team of 3, I hide it and show message "Hidden - group too small". Manager can see company level or department level attrition but not his own team of 3.
-
-I think this is correct because one privacy bug can expose someone. Better to hide than to leak.
-
-So my decision: Hide attrition for team of 3.
+## 5. Freshness
+Data last refreshed on 2026-11-18. Freshness is stated in every API response.
