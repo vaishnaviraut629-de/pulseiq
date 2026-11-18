@@ -36,3 +36,9 @@ So before changing any column name, we should first check lineage and see which 
 **1. headcount - WILL BREAK**
 
 Reason: This metric depends on the `pulseiq_aggregate` table
+## 6. Freshness in App
+Dashboard madhe pan "Data last refreshed on 2026-11-18" dakhavle ahe.
+
+## 7. Deployment
+API is deployed from the same GitHub repository as dashboard: https://github.com/vaishnaviraut629-de/pulseiq
+API code is in api/main.py file.
