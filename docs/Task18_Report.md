@@ -1,29 +1,38 @@
-# Task 19 - Governed API Report
+# Task 18 - Self-Service Report
 
-## 1. What was built
-5 metrics are exposed through FastAPI. Each endpoint returns value, definition, source and freshness.
+## 1. Live Link
+Live Link: https://pulseiq-o5gndhpk8k9qbd2wmrk5o.streamlit.app/
+GitHub Repo: https://github.com/vaishnaviraut629-de/pulseiq
+Date: 19 Nov 2026
 
-## 2. API Examples
-GET /metrics/headcount -> {"metric":"headcount","value":81,"definition":"Count of Active employees","source":"pulseiq_aggregate table","last_refresh":"2026-11-18"}
-GET /metrics/attrition_rate -> {"metric":"attrition_rate","value":12.5,"definition":"Percentage of employees who left in last 12 months"}
-GET /metrics/avg_tenure -> {"metric":"avg_tenure","value":3.2,"definition":"Average tenure in years"}
-GET /metrics/avg_salary -> {"metric":"avg_salary","value":65000,"definition":"Average salary of Active employees"}
-GET /metrics/new_hires -> {"metric":"new_hires","value":8,"definition":"Employees joined in last 30 days"}
+## 2. What User Can Do Without Help?
+1. Department Filter badlu shakto - Chart aapoaap badalto
+2. Page badlu shakto - Workforce, Attendance, Attrition, Payroll, Budget, PnL, AI Signals
+3. KPI baghu shakto - Headcount = 81, Attrition = 12.5%
+4. Safe Download karu shakto - Fakt Aggregate data
 
-## 3. Lineage
-For all 5 metrics:
-Raw Feed -> ETL (api/main.py) -> pulseiq_aggregate (Warehouse) -> Metric View -> Dashboard
+## 3. Filters Tested
+| Filter | Result |
+| :--- | :--- |
+| Department = All | 81 employees disle |
+| Department = Changed | Chart lagech badalla |
+| Page = Attrition | Chart ughadla, No Error |
 
-## 4. Think For Yourself
-Q: Someone changes a column name in the raw feed. Which of your metrics would break? List them from your lineage.
-Ans:
-In my lineage, all 5 metrics will break. Because all 5 metrics come from the same pulseiq_aggregate table and that table comes from the raw feed.
-1. headcount - will break
-2. attrition_rate - will break
-3. avg_tenure - will break
-4. avg_salary - will break
-5. new_hires - will break
-If the column name is changed, the ETL will not find that column, the table will not update and all 5 APIs will show wrong value or error. So before changing any column, we must check lineage first.
+## 4. Safe Download
+- Fakt `pulseiq_aggregate` table download hoto
+- Name, Phone, Salary konacha hi disat nahi
+- Raw Feed dashboard madhe nahi
 
-## 5. Freshness
-Data last refreshed on 2026-11-18. Freshness is stated in every API response.
+## 5. Think For Yourself 
+
+Q: A manager has a team of 3. Should they see attrition for their team? Decide and explain.
+
+Ans: My decision is NO, we should not show attrition for a team of 3.
+
+I thought about it like this. If the team has only 3 people and 1 person leaves, the dashboard will show attrition as 33.3%. That number looks very big and scary, but actually it is just 1 person. So the percentage is misleading. Manager will panic for no reason.
+
+Second problem is privacy. In a team of 3, everyone knows who left. If we show attrition, cost, or reason, the manager will easily know who it was. That is not fair to that employee. We should not expose a single person like that.
+
+So what I will do is, I will hide the attrition number when team size is less than 5. Instead of showing 33%, I will show "Data Hidden - Team Too Small" or I will show only company level attrition which is 12.5%. That way manager still gets an idea, but no single person is exposed.
+
+In short, for small teams, showing exact attrition is wrong because it is both wrong in maths and wrong for privacy. So I will suppress it.
